@@ -25,6 +25,10 @@
 #include "task.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include "uart.h"
+#include "button_led.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +48,13 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
+
+extern uint8_t rx1_buf[UART_BUF_SISE];
+extern uint8_t tx1_buf[UART_BUF_SISE];
+extern uint16_t rx1_cnt;
+extern uint16_t rx1_tmr;
+
+uint8_t dir_tmr = 0;
 
 /* USER CODE END PV */
 
@@ -164,6 +175,33 @@ void DebugMon_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles DMA1 stream3 global interrupt.
+  */
+void DMA1_Stream3_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream3_IRQn 0 */
+
+	if(LL_DMA_IsActiveFlag_TC3(DMA1))
+	{
+		LL_DMA_ClearFlag_TC3(DMA1);
+		/* Call function Transmission complete Callback */
+		LL_DMA_DisableStream(DMA1, LL_DMA_STREAM_3);
+		dir_tmr = 2;
+	}
+	else if(LL_DMA_IsActiveFlag_TE3(DMA1))
+	{
+	 /* Call Error function */
+		LL_DMA_DisableStream(DMA1, LL_DMA_STREAM_3);
+	}
+
+  /* USER CODE END DMA1_Stream3_IRQn 0 */
+  
+  /* USER CODE BEGIN DMA1_Stream3_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream3_IRQn 1 */
+}
+
+/**
   * @brief This function handles CAN1 RX0 interrupts.
   */
 void CAN1_RX0_IRQHandler(void)
@@ -184,11 +222,40 @@ void TIM2_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM2_IRQn 0 */
 
+  if(rx1_cnt) {rx1_tmr++;}else rx1_tmr=0;
+  if(dir_tmr) {
+	  dir_tmr--;
+	  if(dir_tmr==0) {
+		  HAL_GPIO_WritePin(RS485_DIR_GPIO_Port,RS485_DIR_Pin,GPIO_PIN_RESET);
+	  }
+  }
+
+
   /* USER CODE END TIM2_IRQn 0 */
   HAL_TIM_IRQHandler(&htim2);
   /* USER CODE BEGIN TIM2_IRQn 1 */
 
   /* USER CODE END TIM2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles USART3 global interrupt.
+  */
+void USART3_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART3_IRQn 0 */
+
+	if(LL_USART_IsActiveFlag_RXNE(USART3) && LL_USART_IsEnabledIT_RXNE(USART3))
+	{
+		rx1_buf[rx1_cnt++] = LL_USART_ReceiveData8(USART3);
+		if(rx1_cnt>=UART_BUF_SISE) rx1_cnt = 0;
+		rx1_tmr = 0;
+	}
+
+  /* USER CODE END USART3_IRQn 0 */
+  /* USER CODE BEGIN USART3_IRQn 1 */
+
+  /* USER CODE END USART3_IRQn 1 */
 }
 
 /**

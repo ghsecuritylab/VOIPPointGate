@@ -29,6 +29,7 @@
 
 #include "button_led.h"
 #include "udp_server.h"
+#include "uart.h"
 
 /* USER CODE END Includes */
 
@@ -140,13 +141,14 @@ void StartDefaultTask(void const * argument)
   /* Infinite loop */
 
   led_init();
-  button_init();
+  //button_init();
   udp_server_init();
 
   for(;;)
   {
     osDelay(500);
-    toggle_first_led(GREEN);
+    //toggle_first_led(GREEN);
+    //send_data_to_uart1((uint8_t*)"hello\r\n",7);
   }
   /* USER CODE END StartDefaultTask */
 }

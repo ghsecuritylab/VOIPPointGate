@@ -37,6 +37,7 @@
 #include "button_led.h"
 #include "can_tx_stack.h"
 #include "frame_stack.h"
+#include "uart.h"
 
 /* USER CODE END Includes */
 
@@ -136,6 +137,10 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_3);
+  LL_DMA_EnableIT_TE(DMA1, LL_DMA_STREAM_3);
+  LL_USART_EnableIT_RXNE(USART3);
+
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*) &adc_data,3);
 
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -214,7 +219,7 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV8;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
@@ -261,6 +266,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	  packet_tmr=0;
 	  can_caught_id = 0;
   }
+  uart1_scan();
 
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM2) {
