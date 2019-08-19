@@ -65,6 +65,10 @@ void Error_Handler(void);
 #define DI2_GPIO_Port GPIOA
 #define DI3_Pin GPIO_PIN_6
 #define DI3_GPIO_Port GPIOA
+#define PWM1_Pin GPIO_PIN_11
+#define PWM1_GPIO_Port GPIOE
+#define PWM2_Pin GPIO_PIN_13
+#define PWM2_GPIO_Port GPIOE
 #define CE_Pin GPIO_PIN_13
 #define CE_GPIO_Port GPIOD
 #define LED1_G_Pin GPIO_PIN_6
@@ -75,6 +79,8 @@ void Error_Handler(void);
 #define LED2_R_GPIO_Port GPIOC
 #define LED2_G_Pin GPIO_PIN_9
 #define LED2_G_GPIO_Port GPIOC
+#define RS485_DIR_Pin GPIO_PIN_12
+#define RS485_DIR_GPIO_Port GPIOC
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
