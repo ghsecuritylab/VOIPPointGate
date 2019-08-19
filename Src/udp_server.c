@@ -30,6 +30,8 @@ uint8_t destination_point = 255;
 extern uint8_t rx_group;
 extern uint8_t rx_point;
 
+extern uint16_t adc_data[3];
+
 
 static void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port);
 static void inline send_udp_data(struct udp_pcb *upcb,const ip_addr_t *addr,u16_t port,u16_t length);
@@ -92,6 +94,21 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[7]=crc>>8;
 			  answer[8]=crc&0xFF;
 			  send_udp_data(upcb, addr, port,9);
+			  break;
+		  case 0xD0:
+			  answer[0] = data[0];
+			  answer[1] = data[1];
+			  answer[2] = 0xD0;
+			  answer[3] = adc_data[0]>>8;
+			  answer[4] = adc_data[0] & 0xFF;
+			  answer[5] = adc_data[1]>>8;
+			  answer[6] = adc_data[1] & 0xFF;
+			  answer[7] = adc_data[2]>>8;
+			  answer[8] = adc_data[2] & 0xFF;
+			  crc = GetCRC16((unsigned char*)answer,9);
+			  answer[9]=crc>>8;
+			  answer[10]=crc&0xFF;
+			  send_udp_data(upcb, addr, port,11);
 			  break;
 		  case 0xEF:
 			  SCB->AIRCR = 0x05FA0004;

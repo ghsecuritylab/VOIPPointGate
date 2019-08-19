@@ -21,7 +21,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "adc.h"
 #include "can.h"
+#include "dma.h"
 #include "lwip.h"
 #include "rtc.h"
 #include "gpio.h"
@@ -61,6 +63,8 @@ extern CAN_HandleTypeDef hcan1;
 extern tx_stack can1_tx_stack;
 extern uint32_t	can_caught_id;
 extern uint16_t packet_tmr;
+
+uint16_t adc_data[3]={0,0,0};
 
 /* USER CODE END PV */
 
@@ -121,10 +125,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_FSMC_Init();
   MX_CAN1_Init();
   MX_RTC_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_ADC_Start_DMA(&hadc1,(uint32_t*) &adc_data,3);
 
   init_can_frames();
   init_can_tx_stack(&can1_tx_stack);
@@ -134,6 +142,7 @@ int main(void)
   if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
 	  Error_Handler();
   }
+
 
 
 
