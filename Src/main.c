@@ -144,6 +144,8 @@ int main(void)
   TIM1->CCR2=32756;
   TIM1->CCR3=10000;
 
+  HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_SET);
+
   init_can_frames();
   init_can_tx_stack(&can1_tx_stack);
 
