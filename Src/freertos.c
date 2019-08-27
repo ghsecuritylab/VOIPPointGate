@@ -30,6 +30,8 @@
 #include "button_led.h"
 #include "udp_server.h"
 #include "uart.h"
+#include "modbus.h"
+#include "can_cmd.h"
 
 /* USER CODE END Includes */
 
@@ -41,6 +43,10 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define		DI_BREAK_LIMIT		200
+#define		DI_OPEN_LIMIT		800
+#define		DI_CLOSED_LIMIT		2000
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,6 +56,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+
+extern uint16_t adc_data[3];
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
@@ -146,7 +154,10 @@ void StartDefaultTask(void const * argument)
 
   for(;;)
   {
-    osDelay(500);
+    osDelay(100);
+    if(adc_data[0]>DI_OPEN_LIMIT && adc_data[0]<DI_CLOSED_LIMIT) {
+    	send_scan_cmd();
+    }
     //toggle_first_led(GREEN);
     //send_data_to_uart1((uint8_t*)"hello\r\n",7);
   }

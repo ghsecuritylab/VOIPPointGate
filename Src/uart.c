@@ -8,6 +8,7 @@
 #include "uart.h"
 #include "main.h"
 #include "button_led.h"
+#include "data.h"
 
 #define UART_RX_READY_TIME_MS		10
 
@@ -45,4 +46,9 @@ void send_data_to_uart1(uint8_t *ptr, uint16_t cnt) {
 	LL_USART_EnableDMAReq_TX(USART3);
 	LL_DMA_EnableStream(DMA1, LL_DMA_STREAM_3);
 }
+
+void write_data(buf* data) {
+	send_data_to_uart1(data->ptr,data->cnt);
+}
+
 

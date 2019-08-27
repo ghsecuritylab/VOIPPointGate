@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#define UART_BUF_SISE	32
+#define UART_BUF_SISE	512
 
 void uart1_scan(void);
 void send_data_to_uart1(uint8_t *ptr, uint16_t cnt);

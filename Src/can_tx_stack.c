@@ -3,6 +3,13 @@
 #include "main.h"
 #include "frame_stack.h"
 #include "button_led.h"
+#include "can_cmd.h"
+#include "modbus.h"
+
+extern unsigned short holdReg[HoldingRegistersLimit];
+extern unsigned char discrInp[DiscreteInputsLimit];
+extern unsigned short inpReg[InputRegistersLimit];
+extern unsigned char coils[CoilsLimit];
 
 tx_stack can1_tx_stack;
 //tx_stack can2_tx_stack;
@@ -28,6 +35,7 @@ static CAN_RxHeaderTypeDef   RxHeader;
 static uint8_t               RxData[8];
 
 uint8_t wr_stack_flag = 0;
+
 
 extern CAN_HandleTypeDef hcan1;
 
@@ -110,6 +118,7 @@ void divide_to_packets_and_send_to_can(uint8_t dest_group, uint8_t dest_point, u
 			for(i=0;i<len;i++) packet.data[i] = ptr[(cur_pckt-1)*8+i];
 			add_tx_can_packet(&can1_tx_stack,&packet);
 			//add_tx_can_packet(&can2_tx_stack,&packet);
+			//toggle_first_led(GREEN);
 			cur_pckt++;
 			len=0;
 		}else {
@@ -125,13 +134,13 @@ void divide_to_packets_and_send_to_can(uint8_t dest_group, uint8_t dest_point, u
 }
 
 void can_write_from_stack() {
-	static uint8_t intern_tmr = 0;
-	static uint8_t start_flag = 0;
+	//static uint8_t intern_tmr = 0;
+	//static uint8_t start_flag = 0;
 	tx_stack_data packet;
 	uint8_t i = 0;
 	if(wr_stack_flag) return;
-	intern_tmr++;
-	if(intern_tmr>=20) start_flag = 1;
+	//intern_tmr++;
+	//if(intern_tmr>=20) start_flag = 1;
 	//if(start_flag) {
 		while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1)!=0) {
 			if(get_tx_can_packet(&can1_tx_stack,&packet)) {
@@ -143,11 +152,13 @@ void can_write_from_stack() {
 				TxHeader.DLC = packet.length;
 				for(i=0;i<packet.length;++i) TxData[i] = packet.data[i];
 				HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox1);
+				//toggle_first_led(GREEN);
 			}else {
-				start_flag = 0;
+				//start_flag = 0;
 				break;
 			}
 		}
+
 	//}
 
 	/*while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan2)!=0) {
@@ -219,7 +230,7 @@ void check_can_rx(uint8_t can_num) {
 	if(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0)) {
 		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
 			p_id = (id_field*)(&(RxHeader.ExtId));
-			if(p_id->cmd==1) { // аудиопоток
+			if(p_id->cmd==AUDIO_PACKET) { // аудиопоток
 				if(check_id_priority(RxHeader.ExtId)) {
 					packet_tmr = 0;
 					cur_num = p_id->param & 0x0F;
@@ -247,6 +258,21 @@ void check_can_rx(uint8_t can_num) {
 						}
 					}
 				}
+			}else if(p_id->cmd==POINT_STATE) {
+				toggle_first_led(GREEN);
+				if(p_id->point_addr>0 && p_id->point_addr<=100) {
+					discrInp[16+(p_id->point_addr-1)*10] = RxData[0]&0x01;		// исправность микрофона/динамика
+					discrInp[16+(p_id->point_addr-1)*10+1] = RxData[1]&0x01;	// di1
+					discrInp[16+(p_id->point_addr-1)*10+2] = RxData[1]&0x02;	// обрыв
+					discrInp[16+(p_id->point_addr-1)*10+3] = RxData[1]&0x04;	// кз
+					discrInp[16+(p_id->point_addr-1)*10+4] = RxData[1]&0x08;	// di2
+					discrInp[16+(p_id->point_addr-1)*10+5] = RxData[1]&0x10;	// обрыв
+					discrInp[16+(p_id->point_addr-1)*10+6] = RxData[1]&0x20;	// кз
+					discrInp[16+(p_id->point_addr-1)*10+7] = RxData[1]&0x40;		// do1
+					discrInp[16+(p_id->point_addr-1)*10+8] = RxData[1]&0x80;		// do2
+				}
+			}else if(p_id->cmd==LAST_POINT) {
+				inpReg[0] = p_id->point_addr;
 			}
 		}
 	}

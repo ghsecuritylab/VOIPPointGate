@@ -38,6 +38,7 @@
 #include "can_tx_stack.h"
 #include "frame_stack.h"
 #include "uart.h"
+#include "can_cmd.h"
 
 /* USER CODE END Includes */
 
@@ -68,6 +69,10 @@ extern uint32_t	can_caught_id;
 extern uint16_t packet_tmr;
 
 uint16_t adc_data[3]={0,0,0};
+
+#define		DI_BREAK_LIMIT		200
+#define		DI_OPEN_LIMIT		800
+#define		DI_CLOSED_LIMIT		2000
 
 /* USER CODE END PV */
 
