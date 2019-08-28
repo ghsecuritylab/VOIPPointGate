@@ -35,6 +35,7 @@ static CAN_RxHeaderTypeDef   RxHeader;
 static uint8_t               RxData[8];
 
 uint8_t wr_stack_flag = 0;
+uint16_t can_tmr = 0;
 
 
 extern CAN_HandleTypeDef hcan1;
@@ -232,6 +233,7 @@ void check_can_rx(uint8_t can_num) {
 			p_id = (id_field*)(&(RxHeader.ExtId));
 			if(p_id->cmd==AUDIO_PACKET) { // аудиопоток
 				if(check_id_priority(RxHeader.ExtId)) {
+					//toggle_first_led(GREEN);
 					packet_tmr = 0;
 					cur_num = p_id->param & 0x0F;
 					cnt = (p_id->param & 0xFF)>> 4;
@@ -259,7 +261,6 @@ void check_can_rx(uint8_t can_num) {
 					}
 				}
 			}else if(p_id->cmd==POINT_STATE) {
-				toggle_first_led(GREEN);
 				if(p_id->point_addr>0 && p_id->point_addr<=100) {
 					discrInp[16+(p_id->point_addr-1)*10] = RxData[0]&0x01;		// исправность микрофона/динамика
 					discrInp[16+(p_id->point_addr-1)*10+1] = RxData[1]&0x01;	// di1
@@ -273,6 +274,7 @@ void check_can_rx(uint8_t can_num) {
 				}
 			}else if(p_id->cmd==LAST_POINT) {
 				inpReg[0] = p_id->point_addr;
+				can_tmr = 0;
 			}
 		}
 	}

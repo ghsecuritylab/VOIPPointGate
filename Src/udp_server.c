@@ -130,7 +130,6 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  for(i=0;i<pckt_cnt;i++) pckt_length[i] = data[6+i];
 			  offset = 6 + pckt_cnt;
 			  answer_offset = 6 + pckt_cnt;
-			  toggle_first_led(GREEN);
 
 			  for(i=0;i<pckt_cnt;i++) {
 				  divide_to_packets_and_send_to_can(destination_group, destination_point, pckt_length[i], &data[offset]);
@@ -168,9 +167,9 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 				  offset+=pckt_length[i];
 				  length=get_can_frame((unsigned char*)&answer[answer_offset]);
 				  answer[6+i] = length;
-				  if(length) { answer_offset+=length;}
+				  if(length) {answer_offset+=length;}
 			  }
-			  //toggle_second_led(GREEN);
+
 			  //if(length) toggle_second_led(GREEN);
 			  crc = GetCRC16((unsigned char*)answer,answer_offset);
 			  answer[answer_offset++] = crc>>8;

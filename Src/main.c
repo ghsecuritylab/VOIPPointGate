@@ -151,10 +151,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
 
-  TIM1->CCR2=32756;
-  TIM1->CCR3=10000;
-
-  HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_SET);
+  //TIM1->CCR2=32756;
+  //TIM1->CCR3=10000;
 
   init_can_frames();
   init_can_tx_stack(&can1_tx_stack);

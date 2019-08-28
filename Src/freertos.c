@@ -47,6 +47,16 @@
 #define		DI_OPEN_LIMIT		800
 #define		DI_CLOSED_LIMIT		2000
 
+#define		START_STATE			0
+#define		CHECK_DI1			1
+#define		CHECK_RELAY2		2
+#define		CHECK_DI2			3
+#define		CHECK_AUDIO			4
+#define		CHECK_DI3			5
+#define		CHECK_DI2_2			6
+#define		CHECK_RELAY2_2		7
+#define		CHECK_DI1_2			8
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,7 +67,24 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
+uint8_t		gate_state = START_STATE;
+uint16_t	gate_tmr = 0;
+uint16_t	sec_cnt = 0;
+uint16_t	point_cnt = 2;
+static uint16_t	i = 0;
+static uint8_t	relay2_test = 0;
+static uint8_t	audio_test = 0;
+
+static uint16_t err_dec = 0;
+static uint16_t err_point = 0;
+static uint16_t err_num = 0;
+
 extern uint16_t adc_data[3];
+
+extern unsigned short inpReg[InputRegistersLimit];
+extern unsigned char discrInp[DiscreteInputsLimit];
+
+extern uint16_t can_tmr;
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
@@ -152,14 +179,142 @@ void StartDefaultTask(void const * argument)
   //button_init();
   udp_server_init();
 
+  osDelay(100);
+  get_points_state();
+
   for(;;)
   {
     osDelay(100);
-    if(adc_data[0]>DI_OPEN_LIMIT && adc_data[0]<DI_CLOSED_LIMIT) {
-    	send_scan_cmd();
+
+    inpReg[1] = gate_state;
+
+    for(i=0;i<3;i++) {
+    	if(adc_data[i]<DI_BREAK_LIMIT) {	// обрыв
+    		discrInp[3*i+0] = 0;
+    		discrInp[3*i+1] = 1;
+    		discrInp[3*i+2] = 0;
+    	}else if(adc_data[i]<DI_OPEN_LIMIT) {	// выкл
+    		discrInp[3*i+0] = 0;
+    		discrInp[3*i+1] = 0;
+    		discrInp[3*i+2] = 0;
+    	}else if(adc_data[i]<DI_CLOSED_LIMIT) {	// вкл
+    		discrInp[3*i+0] = 1;
+    		discrInp[3*i+1] = 0;
+    		discrInp[3*i+2] = 0;
+    	}else {	//	кз
+    		discrInp[3*i+0] = 0;
+    		discrInp[3*i+1] = 0;
+    		discrInp[3*i+2] = 1;
+    	}
     }
-    //toggle_first_led(GREEN);
+    if(HAL_GPIO_ReadPin(RELAY1_GPIO_Port,RELAY1_Pin)==GPIO_PIN_SET) discrInp[9]=1;else discrInp[9]=0;
+    if(HAL_GPIO_ReadPin(RELAY2_GPIO_Port,RELAY2_Pin)==GPIO_PIN_SET) discrInp[10]=1;else discrInp[10]=0;
+
+    // manage relay 2
+    relay2_test = 1;
+    if(inpReg[0]>=point_cnt) {
+    	for(i=0;i<point_cnt;++i) {
+    		if(discrInp[16+i*10+1]==0) {relay2_test = 0;break;}
+    	}
+    }else relay2_test = 0;
+    if(relay2_test) {HAL_GPIO_WritePin(RELAY2_GPIO_Port,RELAY2_Pin,GPIO_PIN_SET);}
+    else HAL_GPIO_WritePin(RELAY2_GPIO_Port,RELAY2_Pin,GPIO_PIN_RESET);
+
+    gate_tmr++;
+    if(gate_tmr>=10) {
+    	gate_tmr=0;
+    	sec_cnt++;
+    }
+
+    // dac error
+    err_num = 0;
+    if(inpReg[0]>=point_cnt) {
+		for(i=0;i<point_cnt;++i) {
+			if(discrInp[16+i*10+1]==0) {err_num = i;break;}
+		}
+	}else {
+		if(inpReg[0]) err_num = inpReg[0];else err_num=99;
+	}
+    if(err_num) {
+    	err_dec = err_num/10;
+    	err_point = err_num%10;
+    }else {
+    	err_dec = 0;
+    	err_point = 0;
+    }
+    can_tmr++;
+    if(can_tmr>=20) {
+    	err_dec = 9;
+    	err_point = 9;
+    }
+
+    TIM1->CCR2=(65535/9)*err_dec;
+    TIM1->CCR3=(65535/9)*err_point;
+
+    switch(gate_state) {
+		case START_STATE:
+			if(gate_tmr==0) {	// выключить реле на всех громкоговорителях
+				manage_all_relays(1,0);
+				manage_all_relays(2,0);
+				gate_state = CHECK_DI1;
+			}
+			HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_RESET);
+			break;
+		case CHECK_DI1:
+			if(discrInp[0]) gate_state = CHECK_RELAY2;
+			else gate_state = START_STATE;
+			break;
+		case CHECK_RELAY2:
+			if(HAL_GPIO_ReadPin(RELAY2_GPIO_Port,RELAY2_Pin)==GPIO_PIN_SET) gate_state = CHECK_DI2;
+			else gate_state = START_STATE;
+			break;
+		case CHECK_DI2:
+			if(discrInp[3]) {
+				HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_SET);
+				send_scan_cmd();
+				gate_tmr = 0;sec_cnt = 0;
+				manage_all_relays(2,1);
+				gate_state = CHECK_AUDIO;
+			}else gate_state = START_STATE;
+			break;
+		case CHECK_AUDIO:
+			if(gate_tmr==0) send_scan_cmd();
+			if(sec_cnt>=2) {
+				audio_test = 1;
+				for(i=0;i<point_cnt;i++) {
+					//if(discrInp[16+i*10]==0) {audio_test = 0; break;}
+				}
+				if(audio_test) gate_state = CHECK_DI3;
+				if(sec_cnt>=4) gate_state = START_STATE;
+			}
+			break;
+		case CHECK_DI3:
+			if(discrInp[6]) {
+				gate_state = CHECK_DI2_2;
+			}else gate_state = CHECK_DI1;
+			break;
+		case CHECK_DI2_2:
+			if(adc_data[1]>DI_OPEN_LIMIT && adc_data[1]<DI_CLOSED_LIMIT) {
+				//gate_state = START_STATE;
+				if(gate_tmr==0) send_scan_cmd();
+			}else gate_state = CHECK_RELAY2_2;
+			break;
+		case CHECK_RELAY2_2:
+			if(HAL_GPIO_ReadPin(RELAY2_GPIO_Port,RELAY2_Pin)==GPIO_PIN_SET) gate_state = CHECK_DI1_2;
+			else gate_state = START_STATE;
+			break;
+		case CHECK_DI1_2:
+			if(discrInp[0]) {
+				HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_RESET);
+				manage_all_relays(2,0);
+				manage_all_relays(1,1);
+				gate_state = CHECK_DI3;
+			}
+			else gate_state = START_STATE;
+			break;
+    }
     //send_data_to_uart1((uint8_t*)"hello\r\n",7);
+    // toggle_first_led(GREEN);
   }
   /* USER CODE END StartDefaultTask */
 }
