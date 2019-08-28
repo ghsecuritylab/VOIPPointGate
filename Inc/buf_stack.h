@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#define STACK_SIZE		16
+#define STACK_SIZE		6
 
 typedef struct {
 	uint8_t* data;

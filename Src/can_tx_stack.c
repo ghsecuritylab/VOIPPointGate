@@ -230,6 +230,7 @@ void check_can_rx(uint8_t can_num) {
 	if(can_num==1) hcan = &hcan1; else hcan = 0;//&hcan2;
 	if(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0)) {
 		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
+			//toggle_first_led(GREEN);
 			p_id = (id_field*)(&(RxHeader.ExtId));
 			if(p_id->cmd==AUDIO_PACKET) { // аудиопоток
 				if(check_id_priority(RxHeader.ExtId)) {
@@ -271,6 +272,7 @@ void check_can_rx(uint8_t can_num) {
 					discrInp[16+(p_id->point_addr-1)*10+6] = RxData[1]&0x20;	// кз
 					discrInp[16+(p_id->point_addr-1)*10+7] = RxData[1]&0x40;		// do1
 					discrInp[16+(p_id->point_addr-1)*10+8] = RxData[1]&0x80;		// do2
+					inpReg[16+(p_id->point_addr-1)] = (((uint16_t)RxData[2])<<8) | RxData[3];
 				}
 			}else if(p_id->cmd==LAST_POINT) {
 				inpReg[0] = p_id->point_addr;
