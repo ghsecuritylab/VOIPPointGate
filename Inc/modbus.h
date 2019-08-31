@@ -4,7 +4,7 @@
 #define InputRegistersLimit     128
 #define HoldingRegistersLimit   128
 #define CoilsLimit              16
-#define DiscreteInputsLimit     1000
+#define DiscreteInputsLimit     1024
 
 #include "data.h"
 

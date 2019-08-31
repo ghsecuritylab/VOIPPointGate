@@ -84,6 +84,8 @@ extern uint16_t adc_data[3];
 extern unsigned short inpReg[InputRegistersLimit];
 extern unsigned char discrInp[DiscreteInputsLimit];
 
+uint8_t modbus_di_array[DiscreteInputsLimit/8];
+
 extern uint16_t can_tmr;
 
 /* USER CODE END Variables */
@@ -92,6 +94,22 @@ osThreadId canTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+
+static void bytes_to_bits(uint8_t *inp, uint8_t *out, uint16_t cnt) {
+	uint16_t i = 0;
+	uint8_t bit_num = 0;
+	uint16_t byte_num = 0;
+	uint8_t byte_value = 0;
+	for(i=0;i<cnt;i++) {
+		if(inp[i]) byte_value |= 1<<bit_num;
+		bit_num++;
+		if(bit_num==8) {
+			bit_num = 0;
+			out[byte_num++] = byte_value;
+			byte_value = 0;
+		}
+	}
+}
    
 /* USER CODE END FunctionPrototypes */
 
@@ -246,6 +264,7 @@ void StartDefaultTask(void const * argument)
     if(can_tmr>=20) {
     	err_dec = 9;
     	err_point = 9;
+    	inpReg[0] = 0;
     }
 
     TIM1->CCR2=(65535/9)*err_dec;
@@ -294,8 +313,8 @@ void StartDefaultTask(void const * argument)
 			}else gate_state = CHECK_DI1;
 			break;
 		case CHECK_DI2_2:
-			if(adc_data[1]>DI_OPEN_LIMIT && adc_data[1]<DI_CLOSED_LIMIT) {
-				//gate_state = START_STATE;
+			if(discrInp[3]) {
+				if(discrInp[0]==0) gate_state = START_STATE;
 				if(gate_tmr==0) send_scan_cmd();
 			}else gate_state = CHECK_RELAY2_2;
 			break;
@@ -315,6 +334,7 @@ void StartDefaultTask(void const * argument)
     }
     //send_data_to_uart1((uint8_t*)"hello\r\n",7);
     // toggle_first_led(GREEN);
+    bytes_to_bits(discrInp,modbus_di_array,DiscreteInputsLimit);
   }
   /* USER CODE END StartDefaultTask */
 }

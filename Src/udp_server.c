@@ -15,6 +15,8 @@
 #include "button_led.h"
 #include "frame_stack.h"
 #include "can_tx_stack.h"
+#include "modbus.h"
+#include "can_cmd.h"
 
 #define UDP_SERVER_PORT    12145
 
@@ -31,6 +33,13 @@ extern uint8_t rx_group;
 extern uint8_t rx_point;
 
 extern uint16_t adc_data[3];
+
+extern unsigned short inpReg[InputRegistersLimit];
+extern unsigned short holdReg[HoldingRegistersLimit];
+extern unsigned char coils[CoilsLimit];
+extern unsigned char discrInp[DiscreteInputsLimit];
+
+extern uint8_t modbus_di_array[DiscreteInputsLimit/8];
 
 
 static void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port);
@@ -70,7 +79,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 	unsigned short length = 0;
 	unsigned short offset = 0;
 	unsigned short answer_offset = 0;
-	unsigned char i=0;
+	unsigned short i=0;
 	static unsigned char pckt_cnt = 0;
 	static unsigned char pckt_length[20];
 
@@ -96,19 +105,30 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  send_udp_data(upcb, addr, port,9);
 			  break;
 		  case 0xD0:
-			  answer[0] = data[0];
-			  answer[1] = data[1];
-			  answer[2] = 0xD0;
-			  answer[3] = adc_data[0]>>8;
-			  answer[4] = adc_data[0] & 0xFF;
-			  answer[5] = adc_data[1]>>8;
-			  answer[6] = adc_data[1] & 0xFF;
-			  answer[7] = adc_data[2]>>8;
-			  answer[8] = adc_data[2] & 0xFF;
-			  crc = GetCRC16((unsigned char*)answer,9);
-			  answer[9]=crc>>8;
-			  answer[10]=crc&0xFF;
-			  send_udp_data(upcb, addr, port,11);
+			  answer[0] = data[0];	// id high
+			  answer[1] = data[1];	// id low
+			  answer[2] = 0xD0;		// cmd
+			  for(i=0;i<116;i++) {
+				  answer[3+i*2] = inpReg[i]>>8;
+				  answer[3+i*2+1] = inpReg[i]&0xFF;
+			  }
+			  for(i=0;i<DiscreteInputsLimit/8;i++) {
+				  answer[235+i] = modbus_di_array[i];
+			  }
+			  crc = GetCRC16((unsigned char*)answer,235+128);
+			  answer[363]=crc>>8;
+			  answer[364]=crc&0xFF;
+			  send_udp_data(upcb, addr, port,365);
+			  break;
+		  case 0xD1:
+			  answer[0] = data[0];	// id high
+			  answer[1] = data[1];	// id low
+			  answer[2] = 0xD0;		// cmd
+			  crc = GetCRC16((unsigned char*)answer,3);
+			  answer[3]=crc>>8;
+			  answer[4]=crc&0xFF;
+			  send_udp_data(upcb, addr, port,5);
+			  send_scan_cmd();
 			  break;
 		  case 0xEF:
 			  SCB->AIRCR = 0x05FA0004;

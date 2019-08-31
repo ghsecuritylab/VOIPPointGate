@@ -272,6 +272,7 @@ void check_can_rx(uint8_t can_num) {
 					discrInp[16+(p_id->point_addr-1)*10+6] = RxData[1]&0x20;	// кз
 					discrInp[16+(p_id->point_addr-1)*10+7] = RxData[1]&0x40;		// do1
 					discrInp[16+(p_id->point_addr-1)*10+8] = RxData[1]&0x80;		// do2
+					discrInp[16+(p_id->point_addr-1)*10+9] = RxData[0]&0x02;		// проверка испрвн динамиков
 					inpReg[16+(p_id->point_addr-1)] = (((uint16_t)RxData[2])<<8) | RxData[3];
 				}
 			}else if(p_id->cmd==LAST_POINT) {
