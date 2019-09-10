@@ -30,7 +30,9 @@
 #include "cmsis_os.h"
 /* Within 'USER CODE' section, code will be kept by default at each generation */
 /* USER CODE BEGIN 0 */
+#include "modbus.h"
 
+extern unsigned short holdReg[HoldingRegistersLimit];
 /* USER CODE END 0 */
 
 /* Private define ------------------------------------------------------------*/
@@ -234,9 +236,9 @@ static void low_level_init(struct netif *netif)
   MACAddr[0] = 0x00;
   MACAddr[1] = 0x80;
   MACAddr[2] = 0xE1;
-  MACAddr[3] = 0x00;
-  MACAddr[4] = 0x00;
-  MACAddr[5] = 0x00;
+  MACAddr[3] = 0x70;
+  MACAddr[4] = holdReg[2];
+  MACAddr[5] = holdReg[3];
   heth.Init.MACAddr = &MACAddr[0];
   heth.Init.RxMode = ETH_RXINTERRUPT_MODE;
   heth.Init.ChecksumMode = ETH_CHECKSUM_BY_HARDWARE;

@@ -39,6 +39,8 @@
 #include "frame_stack.h"
 #include "uart.h"
 #include "can_cmd.h"
+#include "eeprom.h"
+#include "modbus.h"
 
 /* USER CODE END Includes */
 
@@ -67,6 +69,10 @@ extern CAN_HandleTypeDef hcan1;
 extern tx_stack can1_tx_stack;
 extern uint32_t	can_caught_id;
 extern uint16_t packet_tmr;
+
+uint16_t VirtAddVarTab[NB_OF_VAR]={1,2,3,4,5,6,7,8,9,10,11,12,13,14};
+
+extern unsigned short holdReg[HoldingRegistersLimit];
 
 uint16_t adc_data[3]={0,0,0};
 
@@ -141,6 +147,23 @@ int main(void)
   MX_TIM1_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_FLASH_Unlock();
+  EE_Init();
+  EE_ReadVariable(VirtAddVarTab[0],  &holdReg[0]);
+  if(holdReg[0]!=0x1234) {
+	  EE_WriteVariable(VirtAddVarTab[0],0x1234);
+	  holdReg[0] = 192;holdReg[1] = 168;holdReg[2] = 1;holdReg[3] = 2;
+	  holdReg[4] = 255;holdReg[5] = 255;holdReg[6] = 255;holdReg[7] = 0;
+	  holdReg[8] = 192;holdReg[9] = 168;holdReg[10] = 1;holdReg[11] = 1;
+	  holdReg[12] = 1;
+	  for(uint8_t i=0;i<NB_OF_VAR-1;i++) {
+		  EE_WriteVariable(VirtAddVarTab[i+1],  holdReg[i]);
+	  }
+  }
+  for(uint8_t i=0;i<NB_OF_VAR-1;i++) {
+	  EE_ReadVariable(VirtAddVarTab[i+1],  &holdReg[i]);
+  }
 
   LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_3);
   LL_DMA_EnableIT_TE(DMA1, LL_DMA_STREAM_3);

@@ -27,6 +27,10 @@
 
 /* USER CODE BEGIN 0 */
 
+#include "modbus.h"
+
+extern unsigned short holdReg[HoldingRegistersLimit];
+
 /* USER CODE END 0 */
 /* Private function prototypes -----------------------------------------------*/
 /* ETH Variables initialization ----------------------------------------------*/
@@ -55,7 +59,7 @@ uint8_t GATEWAY_ADDRESS[4];
 void MX_LWIP_Init(void)
 {
   /* IP addresses initialization */
-  IP_ADDRESS[0] = 192;
+  /*IP_ADDRESS[0] = 192;
   IP_ADDRESS[1] = 168;
   IP_ADDRESS[2] = 5;
   IP_ADDRESS[3] = 85;
@@ -66,7 +70,20 @@ void MX_LWIP_Init(void)
   GATEWAY_ADDRESS[0] = 192;
   GATEWAY_ADDRESS[1] = 168;
   GATEWAY_ADDRESS[2] = 5;
-  GATEWAY_ADDRESS[3] = 1;
+  GATEWAY_ADDRESS[3] = 1;*/
+
+  	IP_ADDRESS[0] = holdReg[0];
+	IP_ADDRESS[1] = holdReg[1];
+	IP_ADDRESS[2] = holdReg[2];
+	IP_ADDRESS[3] = holdReg[3];
+	NETMASK_ADDRESS[0] = holdReg[4];
+	NETMASK_ADDRESS[1] = holdReg[5];
+	NETMASK_ADDRESS[2] = holdReg[6];
+	NETMASK_ADDRESS[3] = holdReg[7];
+	GATEWAY_ADDRESS[0] = holdReg[8];
+	GATEWAY_ADDRESS[1] = holdReg[9];
+	GATEWAY_ADDRESS[2] = holdReg[10];
+	GATEWAY_ADDRESS[3] = holdReg[11];
   
   /* Initilialize the LwIP stack with RTOS */
   tcpip_init( NULL, NULL );

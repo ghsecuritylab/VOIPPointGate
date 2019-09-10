@@ -261,7 +261,7 @@ void StartDefaultTask(void const * argument)
     	err_point = 0;
     }
     can_tmr++;
-    if(can_tmr>=20) {
+    if(can_tmr>=30) {
     	err_dec = 9;
     	err_point = 9;
     	inpReg[0] = 0;

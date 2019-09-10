@@ -2,6 +2,7 @@
 #include "crc.h"
 #include "button_led.h"
 #include "can_cmd.h"
+#include "eeprom.h"
 
 #define ReadCoils               0x01
 #define ReadDiscreteInputs      0x02
@@ -18,6 +19,8 @@ unsigned short inpReg[InputRegistersLimit]={0};
 unsigned short holdReg[HoldingRegistersLimit]={0};
 unsigned char coils[CoilsLimit];
 unsigned char discrInp[DiscreteInputsLimit];
+
+extern uint16_t VirtAddVarTab[NB_OF_VAR];
 
 extern void write_data(buf* data);      //  send data to uart
 unsigned char typeOfDevice = 0x01;
@@ -302,6 +305,9 @@ void sendAnswer(modbusCmd* cmd, buf* tx_data)
                     tx_data->cnt = 8;
                     write_data(tx_data);
                     holdReg[cmd->memAddr] = cmd->cnt;
+                    if(cmd->memAddr<NB_OF_VAR-1) {
+                    	EE_WriteVariable(VirtAddVarTab[cmd->memAddr+1],holdReg[cmd->memAddr]);
+					}
                 }
                 break;
             case WriteMultipleCoils:
@@ -342,6 +348,9 @@ void sendAnswer(modbusCmd* cmd, buf* tx_data)
                     for(tmp=0;tmp<cmd->cnt;tmp++)
                     {
 						holdReg[cmd->memAddr + tmp] = (((unsigned short)cmd->ptr[tmp*2])<<8) | cmd->ptr[tmp*2+1];
+						if(cmd->memAddr+tmp<NB_OF_VAR-1) {
+							EE_WriteVariable(VirtAddVarTab[cmd->memAddr+1+tmp],holdReg[cmd->memAddr+tmp]);
+						}
                     }
                 }
                 break;
