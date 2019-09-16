@@ -94,8 +94,12 @@ void Error_Handler(void);
 #define LED2_R_GPIO_Port GPIOC
 #define LED2_G_Pin GPIO_PIN_9
 #define LED2_G_GPIO_Port GPIOC
+#define CAN2_EN_Pin GPIO_PIN_15
+#define CAN2_EN_GPIO_Port GPIOA
 #define RS485_DIR_Pin GPIO_PIN_12
 #define RS485_DIR_GPIO_Port GPIOC
+#define CAN1_EN_Pin GPIO_PIN_4
+#define CAN1_EN_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
