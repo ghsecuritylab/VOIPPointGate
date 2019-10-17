@@ -41,6 +41,7 @@
 #include "can_cmd.h"
 #include "eeprom.h"
 #include "modbus.h"
+#include "dyn_data.h"
 
 /* USER CODE END Includes */
 
@@ -67,8 +68,12 @@ extern CAN_HandleTypeDef hcan1;
 //static CAN_RxHeaderTypeDef   RxHeader;
 //static uint8_t               RxData[8];
 extern tx_stack can1_tx_stack;
+extern tx_stack can2_tx_stack;
 extern uint32_t	can_caught_id;
 extern uint16_t packet_tmr;
+
+extern uint8_t net_addr;
+extern uint8_t current_group;
 
 uint16_t VirtAddVarTab[NB_OF_VAR]={1,2,3,4,5,6,7,8,9,10,11,12,13,14};
 
@@ -106,6 +111,18 @@ static void initCANFilter() {
 	sFilterConfig.FilterActivation = ENABLE;
 	sFilterConfig.SlaveStartFilterBank = 14;
 	HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig);
+
+	sFilterConfig.FilterBank = 14;
+	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	sFilterConfig.FilterIdHigh = 0x0000;
+	sFilterConfig.FilterIdLow = 0x0000;
+	sFilterConfig.FilterMaskIdHigh = 0x0000;
+	sFilterConfig.FilterMaskIdLow = 0x0000;
+	sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+	sFilterConfig.FilterActivation = ENABLE;
+	sFilterConfig.SlaveStartFilterBank = 14;
+	HAL_CAN_ConfigFilter(&hcan2, &sFilterConfig);
 }
 
 /* USER CODE END 0 */
@@ -146,17 +163,19 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_USART3_UART_Init();
+  MX_CAN2_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_FLASH_Unlock();
   EE_Init();
   EE_ReadVariable(VirtAddVarTab[0],  &holdReg[0]);
-  if(holdReg[0]!=0x1234) {
-	  EE_WriteVariable(VirtAddVarTab[0],0x1234);
+  if(holdReg[0]!=0x1235) {
+	  EE_WriteVariable(VirtAddVarTab[0],0x1235);
 	  holdReg[0] = 192;holdReg[1] = 168;holdReg[2] = 1;holdReg[3] = 2;
 	  holdReg[4] = 255;holdReg[5] = 255;holdReg[6] = 255;holdReg[7] = 0;
 	  holdReg[8] = 192;holdReg[9] = 168;holdReg[10] = 1;holdReg[11] = 1;
-	  holdReg[12] = 1;
+	  holdReg[12] = 1; // исло подкл точек
+	  holdReg[13] = 1; // етевой адрес
 	  for(uint8_t i=0;i<NB_OF_VAR-1;i++) {
 		  EE_WriteVariable(VirtAddVarTab[i+1],  holdReg[i]);
 	  }
@@ -164,6 +183,8 @@ int main(void)
   for(uint8_t i=0;i<NB_OF_VAR-1;i++) {
 	  EE_ReadVariable(VirtAddVarTab[i+1],  &holdReg[i]);
   }
+
+  current_group = net_addr = holdReg[13];
 
   LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_3);
   LL_DMA_EnableIT_TE(DMA1, LL_DMA_STREAM_3);
@@ -179,13 +200,19 @@ int main(void)
 
   init_can_frames();
   init_can_tx_stack(&can1_tx_stack);
+  init_can_tx_stack(&can2_tx_stack);
 
   initCANFilter();
   HAL_CAN_Start(&hcan1);
   if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
 	  Error_Handler();
   }
-
+  HAL_CAN_Start(&hcan2);
+  if (HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
+    Error_Handler();
+  }
+  init_groups();
+  init_points();
 
 
 
@@ -264,7 +291,8 @@ void SystemClock_Config(void)
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-	check_can_rx(1);
+	if(hcan==&hcan1) check_can_rx(1);
+	else check_can_rx(2);
 	/*if(HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0)) {
 		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
 			toggle_second_led(GREEN);

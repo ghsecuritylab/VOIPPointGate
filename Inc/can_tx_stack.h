@@ -36,7 +36,7 @@ typedef struct
  uint32_t group_addr: 7;
  uint32_t point_addr: 7;
  uint32_t type: 3;
- uint32_t unused_bits : 3;
+ uint32_t unused_bits: 3;
 } id_field;
 
 typedef struct {

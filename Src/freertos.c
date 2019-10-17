@@ -32,6 +32,7 @@
 #include "uart.h"
 #include "modbus.h"
 #include "can_cmd.h"
+#include "dyn_data.h"
 
 /* USER CODE END Includes */
 
@@ -83,10 +84,17 @@ extern uint16_t adc_data[3];
 
 extern unsigned short inpReg[InputRegistersLimit];
 extern unsigned char discrInp[DiscreteInputsLimit];
+extern uint16_t group_tmr[GROUP_CNT];
+extern struct group_data groups[GROUP_CNT];
 
 uint8_t modbus_di_array[DiscreteInputsLimit/8];
 
+uint16_t group_bits=0;
+
 extern uint16_t can_tmr;
+
+extern uint8_t p_cnt;
+extern uint8_t current_group;
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
@@ -163,11 +171,11 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 1024);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of canTask */
-  osThreadDef(canTask, StartCanTask, osPriorityIdle, 0, 512);
+  osThreadDef(canTask, StartCanTask, osPriorityNormal, 0, 1024);
   canTaskHandle = osThreadCreate(osThread(canTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -193,24 +201,54 @@ void StartDefaultTask(void const * argument)
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
 
+  static uint8_t gate_update_tmr=0;
+  struct group_data group;
+
+  uint16_t j=0;
+
   led_init();
   //button_init();
   udp_server_init();
 
-  osDelay(100);
+  osDelay(500);
+  get_points_state();
+  osDelay(500);
   get_points_state();
 
   for(;;)
   {
     osDelay(100);
+    for(j=0;j<GROUP_CNT;j++){
+    	if(groups[j].num) {
+    		if(group_tmr[j]<50) group_tmr[j]++;else {
+				if(group_tmr[j]==50) {
+					group_tmr[j]++;
+					group.num = j+1;
+					group.point_cnt=0;
+					group.version=0;
+					group.bits=(uint16_t)1<<11;
+					add_group_data(j,&group);
+				}
+			}
+    	}
+    }
+
+    gate_update_tmr++;
+    if(gate_update_tmr>=10) {
+    	gate_update_tmr=0;
+    	send_get_state();
+    }
 
     inpReg[1] = gate_state;
+
+    group.bits=0;
 
     for(i=0;i<3;i++) {
     	if(adc_data[i]<DI_BREAK_LIMIT) {	// обрыв
     		discrInp[3*i+0] = 0;
     		discrInp[3*i+1] = 1;
     		discrInp[3*i+2] = 0;
+    		group.bits |= ((uint16_t)1<<(1+i*3));
     	}else if(adc_data[i]<DI_OPEN_LIMIT) {	// выкл
     		discrInp[3*i+0] = 0;
     		discrInp[3*i+1] = 0;
@@ -219,14 +257,27 @@ void StartDefaultTask(void const * argument)
     		discrInp[3*i+0] = 1;
     		discrInp[3*i+1] = 0;
     		discrInp[3*i+2] = 0;
+    		group.bits |= ((uint16_t)1<<(0+i*3));
     	}else {	//	кз
     		discrInp[3*i+0] = 0;
     		discrInp[3*i+1] = 0;
     		discrInp[3*i+2] = 1;
+    		group.bits |= ((uint16_t)1<<(2+i*3));
     	}
     }
-    if(HAL_GPIO_ReadPin(RELAY1_GPIO_Port,RELAY1_Pin)==GPIO_PIN_SET) discrInp[9]=1;else discrInp[9]=0;
-    if(HAL_GPIO_ReadPin(RELAY2_GPIO_Port,RELAY2_Pin)==GPIO_PIN_SET) discrInp[10]=1;else discrInp[10]=0;
+    if(HAL_GPIO_ReadPin(RELAY1_GPIO_Port,RELAY1_Pin)==GPIO_PIN_SET) {
+    	discrInp[9]=1;group.bits |= ((uint16_t)1<<9);
+    }else discrInp[9]=0;
+    if(HAL_GPIO_ReadPin(RELAY2_GPIO_Port,RELAY2_Pin)==GPIO_PIN_SET) {
+    	discrInp[10]=1;group.bits |= ((uint16_t)1<<10);
+    }else discrInp[10]=0;
+
+    group.num = current_group;
+	group.point_cnt=p_cnt;
+	group.version=1;
+	add_group_data(current_group-1,&group);
+	group_tmr[current_group-1]=0;
+	group_bits = group.bits;
 
     // manage relay 2
     relay2_test = 1;
@@ -265,6 +316,7 @@ void StartDefaultTask(void const * argument)
     	err_dec = 9;
     	err_point = 9;
     	inpReg[0] = 0;
+    	p_cnt=0;
     }
 
     TIM1->CCR2=(65535/9)*err_dec;
@@ -290,14 +342,14 @@ void StartDefaultTask(void const * argument)
 		case CHECK_DI2:
 			if(discrInp[3]) {
 				HAL_GPIO_WritePin(RELAY1_GPIO_Port,RELAY1_Pin,GPIO_PIN_SET);
-				send_scan_cmd();
+				send_scan_cmd_from_gate();
 				gate_tmr = 0;sec_cnt = 0;
 				manage_all_relays(2,1);
 				gate_state = CHECK_AUDIO;
 			}else gate_state = START_STATE;
 			break;
 		case CHECK_AUDIO:
-			if(gate_tmr==0) send_scan_cmd();
+			if(gate_tmr==0) send_scan_cmd_from_gate();
 			if(sec_cnt>=2) {
 				audio_test = 1;
 				for(i=0;i<point_cnt;i++) {
@@ -315,7 +367,7 @@ void StartDefaultTask(void const * argument)
 		case CHECK_DI2_2:
 			if(discrInp[3]) {
 				if(discrInp[0]==0) gate_state = START_STATE;
-				if(gate_tmr==0) send_scan_cmd();
+				if(gate_tmr==0) send_scan_cmd_from_gate();
 			}else gate_state = CHECK_RELAY2_2;
 			break;
 		case CHECK_RELAY2_2:
@@ -333,7 +385,8 @@ void StartDefaultTask(void const * argument)
 			break;
     }
     //send_data_to_uart1((uint8_t*)"hello\r\n",7);
-    // toggle_first_led(GREEN);
+    toggle_first_led(RED);
+    toggle_second_led(RED);
     bytes_to_bits(discrInp,modbus_di_array,DiscreteInputsLimit);
   }
   /* USER CODE END StartDefaultTask */
