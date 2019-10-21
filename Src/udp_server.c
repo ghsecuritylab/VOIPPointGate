@@ -24,6 +24,12 @@
 #define UDP_SERVER_PORT    12145
 
 
+#define MODE_PC_TO_ALL		0
+#define MODE_PC_TO_POINT	1
+#define MODE_PC_TO_GROUP	2
+
+uint8_t cur_mode = MODE_PC_TO_ALL;
+
 static char answer[1324];
 static char lanswer[1324];
 static unsigned short reqID = 0;
@@ -284,6 +290,9 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 
 			  destination_group = data[3];
 			  destination_point = data[4];
+			  if(destination_point==0xFF) cur_mode = MODE_PC_TO_ALL;
+			  else if(destination_point==0x00) {cur_mode = MODE_PC_TO_GROUP;}
+			  else cur_mode = MODE_PC_TO_POINT;
 
 			  answer[3] = rx_group;		// group from
 			  answer[4] = rx_point;  	// point from
@@ -302,7 +311,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 				  answer[6+i] = length;
 				  if(length) { answer_offset+=length;}
 			  }
-			  //toggle_second_led(GREEN);
+			  //if(destination_point==0x00) toggle_second_led(GREEN);
 			  //if(length) toggle_second_led(GREEN);
 			  crc = GetCRC16((unsigned char*)answer,answer_offset);
 			  answer[answer_offset++] = crc>>8;
@@ -316,6 +325,9 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 
 			  destination_group = data[3];
 			  destination_point = data[4];
+			  if(destination_point==0xFF) cur_mode = MODE_PC_TO_ALL;
+			  else if(destination_point==0x00) cur_mode = MODE_PC_TO_GROUP;
+			  else cur_mode = MODE_PC_TO_POINT;
 
 			  answer[3] = rx_group;		// group from
 			  answer[4] = rx_point;  	// point from

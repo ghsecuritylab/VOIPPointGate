@@ -8,6 +8,10 @@
 #include "dyn_data.h"
 #include "udp_server.h"
 
+#define MODE_PC_TO_ALL		0
+#define MODE_PC_TO_POINT	1
+#define MODE_PC_TO_GROUP	2
+
 extern unsigned short holdReg[HoldingRegistersLimit];
 extern unsigned char discrInp[DiscreteInputsLimit];
 extern unsigned short inpReg[InputRegistersLimit];
@@ -46,6 +50,10 @@ uint16_t can_tmr = 0;
 
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
+
+extern uint8_t cur_mode;
+extern uint8_t destination_group;
+extern uint8_t destination_point;
 
 static uint8_t inline is_cmd_through_up(uint8_t cmd) {
 	if(cmd == AUDIO_PACKET || cmd == POINT_STATE || cmd==GATE_STATE || cmd==BOOT) return 1;
@@ -123,10 +131,12 @@ void divide_to_packets_and_send_to_can(uint8_t dest_group, uint8_t dest_point, u
 	}
 	i=1;
 	while(cur_pckt<=pckt_cnt) {
+		p_id->point_addr = dest_point&0x7F;
+		p_id->group_addr = dest_group&0x7F;
 		if(dest_point==0xFF) p_id->type = PC_TO_ALL;
+		else if(dest_point==0x00) {p_id->type = PC_TO_GROUP;p_id->point_addr = 0;}
 		else p_id->type = PC_TO_POINT;
-		p_id->point_addr = dest_point;
-		p_id->group_addr = dest_group;
+
 		p_id->cmd = 1;
 		p_id->param = (cur_pckt&0x0F)|((pckt_cnt&0x0F)<<4);
 		packet.priority = LOW_PACKET_PRIORITY;
@@ -190,41 +200,121 @@ void can_write_from_stack() {
 uint8_t static check_id_priority(uint32_t packet_id) {
 	id_field *input_id = (id_field*)(&packet_id);
 	id_field *cur_id = (id_field*)(&can_caught_id);
-	if(input_id->type==POINT_TO_PC) {
-		if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
-			*cur_id = *input_id;
-			return 1;
-		}
-		// ранее захваченный источник
-		if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
-			*cur_id = *input_id;
-			return 1;
-		}
-		// активный пакет не из родной группы, новый запрос из родной группы, перехватить
-		if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
-			*cur_id = *input_id;
-			return 1;
+	if(cur_mode == MODE_PC_TO_ALL) {
+		if(input_id->type==POINT_TO_PC) {
+			if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+				*cur_id = *input_id;
+				return 1;
+			}
+			// ранее захваченный источник
+			if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+				*cur_id = *input_id;
+				return 1;
+			}
+			// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+			if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+				*cur_id = *input_id;
+				return 1;
 
+			}
+			return 1;
 		}
-		return 1;
+		if(input_id->type==POINT_TO_ALL) { // точка все
+			if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+				*cur_id = *input_id;
+				return 1;
+			}
+			// ранее захваченный источник
+			if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+				*cur_id = *input_id;
+				return 1;
+			}
+			// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+			if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+				*cur_id = *input_id;
+				return 1;
+			}
+			return 0;
+		}
+	}else if(cur_mode == MODE_PC_TO_GROUP) {
+		if(input_id->group_addr == destination_group) {
+			if(input_id->type==POINT_TO_PC) {
+				if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+					*cur_id = *input_id;
+					return 1;
+				}
+				// ранее захваченный источник
+				if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+				if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+					*cur_id = *input_id;
+					return 1;
+
+				}
+				return 1;
+			}
+			if(input_id->type==POINT_TO_ALL) { // точка все
+				if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+					*cur_id = *input_id;
+					return 1;
+				}
+				// ранее захваченный источник
+				if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+				if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				return 0;
+			}
+		}
+	}else {
+		if(input_id->group_addr == destination_group && input_id->point_addr == destination_point) {
+			if(input_id->type==POINT_TO_PC) {
+				if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+					*cur_id = *input_id;
+					return 1;
+				}
+				// ранее захваченный источник
+				if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+				if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+					*cur_id = *input_id;
+					return 1;
+
+				}
+				return 1;
+			}
+			if(input_id->type==POINT_TO_ALL) { // точка все
+				if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
+					*cur_id = *input_id;
+					return 1;
+				}
+				// ранее захваченный источник
+				if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				// активный пакет не из родной группы, новый запрос из родной группы, перехватить
+				if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
+					*cur_id = *input_id;
+					return 1;
+				}
+				return 0;
+			}
+		}
 	}
-	if(input_id->type==POINT_TO_ALL) { // точка все
-		if(cur_id->type==UNKNOWN_TYPE) {	// пакеты не захвачены
-			*cur_id = *input_id;
-			return 1;
-		}
-		// ранее захваченный источник
-		if(cur_id->group_addr == input_id->group_addr && cur_id->point_addr == input_id->point_addr) {
-			*cur_id = *input_id;
-			return 1;
-		}
-		// активный пакет не из родной группы, новый запрос из родной группы, перехватить
-		if(cur_id->group_addr != current_group && input_id->group_addr == current_group) {
-			*cur_id = *input_id;
-			return 1;
-		}
-		return 0;
-	}
+
+
 	return 0;
 }
 
@@ -243,6 +333,7 @@ void check_can_rx(uint8_t can_num) {
 		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
 
 			p_id = (id_field*)(&(RxHeader.ExtId));
+			if(p_id->group_addr==0) return;
 			//if(p_id->cmd==BOOT_ERASE_PAGE && p_id->type==0) toggle_first_led(GREEN);
 			if(p_id->cmd==AUDIO_PACKET) { // аудиопоток
 				if(check_id_priority(RxHeader.ExtId))
