@@ -42,6 +42,7 @@
 #include "eeprom.h"
 #include "modbus.h"
 #include "dyn_data.h"
+#include "can_protocol.h"
 
 /* USER CODE END Includes */
 
@@ -80,6 +81,8 @@ uint16_t VirtAddVarTab[NB_OF_VAR]={1,2,3,4,5,6,7,8,9,10,11,12,13,14};
 extern unsigned short holdReg[HoldingRegistersLimit];
 
 uint16_t adc_data[3]={0,0,0};
+
+extern uint16_t	point_cnt;	// предполагаемое число точек
 
 #define		DI_BREAK_LIMIT		200
 #define		DI_OPEN_LIMIT		800
@@ -174,8 +177,8 @@ int main(void)
 	  holdReg[0] = 192;holdReg[1] = 168;holdReg[2] = 1;holdReg[3] = 2;
 	  holdReg[4] = 255;holdReg[5] = 255;holdReg[6] = 255;holdReg[7] = 0;
 	  holdReg[8] = 192;holdReg[9] = 168;holdReg[10] = 1;holdReg[11] = 1;
-	  holdReg[12] = 1; // исло подкл точек
-	  holdReg[13] = 1; // етевой адрес
+	  holdReg[12] = 1; // число подкл точек
+	  holdReg[13] = 1; // сетевой адрес
 	  for(uint8_t i=0;i<NB_OF_VAR-1;i++) {
 		  EE_WriteVariable(VirtAddVarTab[i+1],  holdReg[i]);
 	  }
@@ -185,6 +188,7 @@ int main(void)
   }
 
   current_group = net_addr = holdReg[13];
+  point_cnt = holdReg[12];
 
   LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_3);
   LL_DMA_EnableIT_TE(DMA1, LL_DMA_STREAM_3);

@@ -8,11 +8,11 @@
 #include "dyn_data.h"
 #include "button_led.h"
 
-struct group_data groups[GROUP_CNT];
-struct point_data points[POINT_CNT];
-struct point_data* group_point[GROUP_CNT];
-uint16_t used_point_cnt = 0;
-uint16_t group_tmr[GROUP_CNT];
+struct group_data groups[GROUP_CNT];	// данные шлюзов
+struct point_data points[POINT_CNT];	// данные точек
+struct point_data* group_point[GROUP_CNT];	// указатель на первую захваченную для группы точку (дальше через next можно получить полный список точек группы)
+uint16_t used_point_cnt = 0;	// общее число обнаруженных точек
+uint16_t group_tmr[GROUP_CNT];	// таймер для детектирования наличия связи с группой
 
 void init_points() {
 	int16_t i=0;
@@ -94,7 +94,6 @@ void add_group_data(uint8_t group_num, struct group_data *ptr) {
 }
 
 void add_point_data(struct point_data *ptr) {
-	//toggle_first_led(GREEN);
 	if((ptr->gr_num<GROUP_CNT) && (ptr->point_num<POINT_CNT)) {
 		struct point_data* point = is_point_created(ptr->gr_num,ptr->point_num);
 		if(point) copy_point_data(ptr,point);

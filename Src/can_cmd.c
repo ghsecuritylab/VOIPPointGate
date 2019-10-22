@@ -7,6 +7,7 @@
 
 #include "can_cmd.h"
 #include "can_tx_stack.h"
+#include "can_protocol.h"
 
 extern uint8_t current_group;
 extern tx_stack can1_tx_stack;

@@ -20,44 +20,37 @@
 #include "dyn_data.h"
 #include "button_led.h"
 #include "cmsis_os.h"
+#include "can_protocol.h"
 
 #define UDP_SERVER_PORT    12145
 
 
-#define MODE_PC_TO_ALL		0
-#define MODE_PC_TO_POINT	1
-#define MODE_PC_TO_GROUP	2
-
 uint8_t cur_mode = MODE_PC_TO_ALL;
 
-static char answer[1324];
-static char lanswer[1324];
-static unsigned short reqID = 0;
+static char answer[1324];	// буфер для ответа запросов по порту UDP_SERVER_PORT (общение с диспетчером)
+static char lanswer[1324];	// буфер для ответа запросов по порту UDP_SERVER_PORT+1 (общение с загрузчиком)
 
-unsigned short udp_tmr = 0;
+volatile uint32_t start_wait_time = 0;	// таймер для ожидания ответов от точек по кан и формирования ethernet ответа
 
-uint8_t wait_load_answer = 0;
-volatile uint32_t start_wait_time = 0;
+uint8_t destination_group = 1;		// активный номер группы для передачи аудио от ПК к точке (получен в запросе по ethernet)
+uint8_t destination_point = 255;	// активный номер точки для передачи аудио от ПК к точке (получен в запросе по ethernet)
 
-uint8_t destination_group = 1;
-uint8_t destination_point = 255;
+extern uint8_t rx_group;	// активный номер группы для передачи аудио от точки к ПК (получен в запросе по can)
+extern uint8_t rx_point;	// активный номер точки для передачи аудио от точки к ПК (получен в запросе по can)
 
-extern uint8_t rx_group;
-extern uint8_t rx_point;
-
-extern uint16_t adc_data[3];
+extern uint16_t adc_data[3];	// данные АЦП (состояние дискретных входов)
 
 extern unsigned short inpReg[InputRegistersLimit];
 extern unsigned short holdReg[HoldingRegistersLimit];
-extern unsigned char coils[CoilsLimit];
 extern unsigned char discrInp[DiscreteInputsLimit];
 
-extern uint8_t modbus_di_array[DiscreteInputsLimit/8];
+extern uint8_t modbus_di_array[DiscreteInputsLimit/8];	// массив для упаковки состояния дискретных входов в байты
 
-uint8_t boot_ack = 0;
-uint8_t boot_id = 0;
-uint8_t erase_ack = 0;
-uint8_t erase_num = 0;
+// флаги для ответа на команды загрузчика
+static uint8_t boot_ack = 0;
+static uint8_t boot_id = 0;
+static uint8_t erase_ack = 0;
+static uint8_t erase_num = 0;
 
 
 static void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port);
@@ -65,11 +58,13 @@ static void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct 
 static void inline send_udp_data(struct udp_pcb *upcb,const ip_addr_t *addr,u16_t port,u16_t length);
 static void inline send_udp_data_loader(struct udp_pcb *upcb,const ip_addr_t *addr,u16_t port,u16_t length);
 
+// вызывается при обработке can протокола (подтверждение записи)
 void send_boot_ack(uint8_t id) {
 	boot_id = id;
 	boot_ack=1;
 }
 
+// вызывается при обработке can протокола (подтверждение стирания)
 void send_erase_ack(uint8_t num) {
 	erase_num = num;
 	erase_ack=1;
@@ -122,6 +117,7 @@ void udp_server_init(void) {
 	}
 }
 
+// функция обратного для загрузчика (порт UDP_SERVER_PORT+1)
 void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
 	unsigned char *data;
 	unsigned short crc;
@@ -131,7 +127,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 	if(crc==0)
 	{
 	  switch(data[2]){
-	  case 0x10:
+	  case 0x10:	// запись данных
 		  send_write_boot_data(data[3], data[4], data[5],data[6], data[7], data[8], data[9],data[10], &data[11]);
 		  boot_ack = 0;
 		  // первые 4 байта - адрес записи,
@@ -153,7 +149,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  }
 		  }
 		  break;
-	  case 0x11:
+	  case 0x11:	// стирание данных
 		  send_erase_page(data[3], data[4], data[5]);
 		  // номер страницы
 		  // группа, точка
@@ -174,7 +170,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  }
 		  }
 		  break;
-	  case 0x12:
+	  case 0x12:	// проверка наличия точки
 		  lanswer[0] = data[0];	// id high
 		  lanswer[1] = data[1];	// id low
 		  lanswer[2] = 0x12;		// cmd
@@ -183,7 +179,6 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  lanswer[3] = 1;
 			  lanswer[4] = point->version;
 		  }else {
-			  //toggle_second_led(GREEN);
 			  lanswer[3] = 0;
 			  lanswer[4] = 0;
 		  }
@@ -192,7 +187,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 		  lanswer[6] = crc&0xFF;
 		  send_udp_data_loader(upcb, addr, port, 7);
 		  break;
-	  case 0x13:
+	  case 0x13:	// переключение точки в режим загрузчика
 		  send_switch_to_boot(data[3],data[4]);
 		  send_switch_to_boot(data[3],data[4]);
 		  send_switch_to_boot(data[3],data[4]);
@@ -204,7 +199,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 		  lanswer[4] = crc&0xFF;
 		  send_udp_data_loader(upcb, addr, port, 5);
 		  break;
-	  case 0x14:
+	  case 0x14:	// перезапуск загрузчика после программирования
 		  send_reset_bootloder(data[3],data[4]);
 		  send_reset_bootloder(data[3],data[4]);
 		  send_reset_bootloder(data[3],data[4]);
@@ -222,6 +217,7 @@ void udp_loader_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 	p = NULL;
 }
 
+// функция обратного для диспетчера (порт UDP_SERVER_PORT)
 void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
 	unsigned char *data;
 	unsigned short crc;
@@ -237,11 +233,8 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 	crc = GetCRC16(data,p->len);
 	if(crc==0)
 	{
-	  udp_tmr = 0;
-	  reqID = (unsigned short)data[0]<<8;
-	  reqID |= data[1];
 	  switch(data[2]){
-		  case 0xA0:
+		  case 0xA0:	// идентификатор типа устройства
 			  answer[0] = data[0];
 			  answer[1] = data[1];
 			  answer[2] = 0xA0;
@@ -254,7 +247,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[8]=crc&0xFF;
 			  send_udp_data(upcb, addr, port,9);
 			  break;
-		  case 0xD0:
+		  case 0xD0:	// чтение модбас входных регистров и дискретных входов
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0xD0;		// cmd
@@ -270,7 +263,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[364]=crc&0xFF;
 			  send_udp_data(upcb, addr, port,365);
 			  break;
-		  case 0xD1:
+		  case 0xD1:	// команда на проверку микрофона/динамиков точек
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0xD0;		// cmd
@@ -280,10 +273,10 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  send_udp_data(upcb, addr, port,5);
 			  send_scan_cmd_from_pc();
 			  break;
-		  case 0xEF:
+		  case 0xEF:	// пересброс шлюза
 			  SCB->AIRCR = 0x05FA0004;
 			  break;
-		  case 0x01:
+		  case 0x01:	// аудио данные от диспетчера в режиме передачи
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0x01;		// cmd
@@ -297,7 +290,6 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[3] = rx_group;		// group from
 			  answer[4] = rx_point;  	// point from
 
-			  //device_id = data[3];
 			  pckt_cnt = data[5];if(pckt_cnt>=20) pckt_cnt=0;
 			  answer[5] = pckt_cnt;
 			  for(i=0;i<pckt_cnt;i++) pckt_length[i] = data[6+i];
@@ -307,18 +299,16 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  for(i=0;i<pckt_cnt;i++) {
 				  divide_to_packets_and_send_to_can(destination_group, destination_point, pckt_length[i], &data[offset]);
 				  offset+=pckt_length[i];
-				  length=0;//get_can_frame((unsigned char*)&answer[answer_offset]);
+				  length=0;
 				  answer[6+i] = length;
 				  if(length) { answer_offset+=length;}
 			  }
-			  //if(destination_point==0x00) toggle_second_led(GREEN);
-			  //if(length) toggle_second_led(GREEN);
 			  crc = GetCRC16((unsigned char*)answer,answer_offset);
 			  answer[answer_offset++] = crc>>8;
 			  answer[answer_offset++] = crc&0xFF;
 			  send_udp_data(upcb, addr, port,answer_offset);
 			  break;
-		  case 0x02:
+		  case 0x02:	// запрос аудио дааных у шлюза диспетчером в режиме прослушивания
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0x02;		// cmd
@@ -332,7 +322,6 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[3] = rx_group;		// group from
 			  answer[4] = rx_point;  	// point from
 
-			  //device_id = data[3];
 			  pckt_cnt = data[5];if(pckt_cnt>=20) pckt_cnt=0;
 			  answer[5] = pckt_cnt;
 			  for(i=0;i<pckt_cnt;i++) pckt_length[i] = data[6+i];
@@ -346,13 +335,12 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 				  if(length) {answer_offset+=length;}
 			  }
 
-			  //if(length) toggle_second_led(GREEN);
 			  crc = GetCRC16((unsigned char*)answer,answer_offset);
 			  answer[answer_offset++] = crc>>8;
 			  answer[answer_offset++] = crc&0xFF;
 			  send_udp_data(upcb, addr, port,answer_offset);
 			  break;
-		  case 0x03:
+		  case 0x03:	// запрос данных по обнаруженным шлюзам
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0x03;		// cmd
@@ -362,7 +350,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[length++] = crc&0xFF;
 			  send_udp_data(upcb, addr, port, length);
 			  break;
-		  case 0x04:
+		  case 0x04:	// запрос данных по обнаруженным точкам
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0x04;		// cmd
@@ -373,7 +361,7 @@ void udp_server_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 			  answer[length++] = crc&0xFF;
 			  send_udp_data(upcb, addr, port, length);
 			  break;
-		  case 0x05:
+		  case 0x05:	// настройка громкости точки
 			  answer[0] = data[0];	// id high
 			  answer[1] = data[1];	// id low
 			  answer[2] = 0x05;		// cmd

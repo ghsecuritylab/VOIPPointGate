@@ -103,6 +103,7 @@ osThreadId canTaskHandle;
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
+// упаковка массива бит в байты
 static void bytes_to_bits(uint8_t *inp, uint8_t *out, uint16_t cnt) {
 	uint16_t i = 0;
 	uint8_t bit_num = 0;
@@ -207,7 +208,6 @@ void StartDefaultTask(void const * argument)
   uint16_t j=0;
 
   led_init();
-  //button_init();
   udp_server_init();
 
   osDelay(500);
@@ -221,7 +221,7 @@ void StartDefaultTask(void const * argument)
     for(j=0;j<GROUP_CNT;j++){
     	if(groups[j].num) {
     		if(group_tmr[j]<50) group_tmr[j]++;else {
-				if(group_tmr[j]==50) {
+				if(group_tmr[j]==50) {	// данные по группе долго не обновлялись, сброс данных
 					group_tmr[j]++;
 					group.num = j+1;
 					group.point_cnt=0;
@@ -233,6 +233,7 @@ void StartDefaultTask(void const * argument)
     	}
     }
 
+    // периодическая отправка состояния шлюза
     gate_update_tmr++;
     if(gate_update_tmr>=10) {
     	gate_update_tmr=0;
@@ -241,8 +242,9 @@ void StartDefaultTask(void const * argument)
 
     inpReg[1] = gate_state;
 
-    group.bits=0;
 
+    // формирование данных для текущей группы
+    group.bits=0;
     for(i=0;i<3;i++) {
     	if(adc_data[i]<DI_BREAK_LIMIT) {	// обрыв
     		discrInp[3*i+0] = 0;
@@ -295,7 +297,7 @@ void StartDefaultTask(void const * argument)
     	sec_cnt++;
     }
 
-    // dac error
+    // формирование выхода DAC при некорректном числе подключенных точек
     err_num = 0;
     if(inpReg[0]>=point_cnt) {
 		for(i=0;i<point_cnt;++i) {
@@ -322,6 +324,7 @@ void StartDefaultTask(void const * argument)
     TIM1->CCR2=(65535/9)*err_dec;
     TIM1->CCR3=(65535/9)*err_point;
 
+    // алгоритм управления выходами шлюза и точек
     switch(gate_state) {
 		case START_STATE:
 			if(gate_tmr==0) {	// выключить реле на всех громкоговорителях
@@ -353,7 +356,7 @@ void StartDefaultTask(void const * argument)
 			if(sec_cnt>=2) {
 				audio_test = 1;
 				for(i=0;i<point_cnt;i++) {
-					//if(discrInp[16+i*10]==0) {audio_test = 0; break;}
+					if(discrInp[16+i*10]==0) {audio_test = 0; break;}
 				}
 				if(audio_test) gate_state = CHECK_DI3;
 				if(sec_cnt>=4) gate_state = START_STATE;
@@ -384,7 +387,6 @@ void StartDefaultTask(void const * argument)
 			else gate_state = START_STATE;
 			break;
     }
-    //send_data_to_uart1((uint8_t*)"hello\r\n",7);
     toggle_first_led(RED);
     toggle_second_led(RED);
     bytes_to_bits(discrInp,modbus_di_array,DiscreteInputsLimit);
