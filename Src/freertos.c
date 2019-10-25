@@ -370,7 +370,8 @@ void StartDefaultTask(void const * argument)
 		case CHECK_DI2_2:
 			if(discrInp[3]) {
 				if(discrInp[0]==0) gate_state = START_STATE;
-				if(gate_tmr==0) send_scan_cmd_from_gate();
+				//if(gate_tmr==0) send_scan_cmd_from_gate();
+				if(gate_tmr==0) gate_state = CHECK_DI2;
 			}else gate_state = CHECK_RELAY2_2;
 			break;
 		case CHECK_RELAY2_2:
